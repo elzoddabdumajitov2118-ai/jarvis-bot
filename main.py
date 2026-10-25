@@ -1,80 +1,58 @@
 import os
-from google import genai
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from google import genai
 
-API_KEYS = [
-    "AQ.Ab8RN6IyY3m_t3xPVlIngvwms6CU-5qV6uOwD409R3nRqI4QTA",
-    "AQ.Ab8RN6Iht85MbHgRRGJptRURcXp-V1t1xsDVOaOw-ZtKMCBPWA",
-    "AQ.Ab8RN6IuwuzQATJUu0Rwy8dIXOwT8E4jGj2FchEmGgBgWFwcDQ",
-    "AQ.Ab8RN6ImhhHnQo34_Ud1zwPV5VSHGiMK25jlSYFpA4MXpyZgmA",
-    "AQ.Ab8RN6Kc_twXMVBNIfnzcRmYWNAN4XpwxjLWHdcy5UmhwjBnDQ",
-    "AQ.Ab8RN6IIf7xmUSscnjnKsX10rg4nmF4WFW_9H3-P7UUsT0-1uQ",
-    "AQ.Ab8RN6KueQp89q_gvJFhrJWC_t4hM-gDDr-YYDfAMuASrKHvlw",
-    "AQ.Ab8RN6KhIn-OWLkaVRUWdJyCx5ftzVOBqaQ6RCl1EpCJoDebsw",
-    "AQ.Ab8RN6JhPlh2rkt8_42qwjJu7469Vd-Zn1wxyiaekIuNyY5-eg",
-    "AQ.Ab8RN6LFwGjQ9yHh1lgSW_oK-ZdDP9WNJlw1Qur1ohqwQ0X7Xw"
-]
+# ==========================================
+# 1. RENDER PORT TALABINI QONDIRUVCHI SERVER
+# ==========================================
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"JARVIS Bot is active and running!")
 
-current_key_index = 0
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    server.serve_forever()
 
-def get_next_client():
-    global current_key_index
-    key = API_KEYS[current_key_index]
-    current_key_index = (current_key_index + 1) % len(API_KEYS)
-    return genai.Client(api_key=key)
+# Veb-serverni fonda alohida oqimda ishga tushiramiz
+threading.Thread(target=run_web_server, daemon=True).start()
 
-client = get_next_client()
-user_chats = {}
+# ==========================================
+# 2. BOT VA GEMINI MANTIQIY QISMI
+# ==========================================
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+
+# Google GenAI mijozini ishga tushirish
+ai_client = genai.Client()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global client
-    user_id = update.effective_user.id
     user_message = update.message.text
-    if not user_message:
-        return
-
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-
-    if user_id not in user_chats:
-        user_chats[user_id] = client.chats.create(
-            model="gemini-3.8-flash",
-            config={
-                "system_instruction": "You are JARVIS, a helpful, intelligent, and detailed personal AI assistant. Provide complete, clear, and thorough answers to the user.",
-                "max_output_tokens": 1500
-            }
+    try:
+        # Gemini orqali javob generatsiya qilish
+        response = ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=user_message,
         )
-    
-    chat = user_chats[user_id]
-    
-    for attempt in range(len(API_KEYS)):
-        try:
-            response = chat.send_message(user_message)
-            await update.message.reply_text(response.text)
-            return
-        except Exception as e:
-            if "429" in str(e) or "ResourceExhausted" in str(e):
-                client = get_next_client()
-                user_chats[user_id] = client.chats.create(
-                    model="gemini-3.8-flash",
-                    config={
-                        "system_instruction": "You are JARVIS. Provide complete and detailed answers.",
-                        "max_output_tokens": 1500
-                    }
-                )
-                chat = user_chats[user_id]
-                continue
-            else:
-                await update.message.reply_text(f"Xatolik: {e}")
-                return
+        await update.message.reply_text(response.text)
+    except Exception as e:
+        await update.message.reply_text(f"Xatolik yuz berdi: {e}")
 
-    await update.message.reply_text("Barcha API kalitlarning limiti vaqtincha tugadi. Biroz kuting.")
+def main():
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN topilmadi! Render'da Environment Variables bo'limiga BOT_TOKEN qo'shganingizni tekshiring.")
+
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # Foydalanuvchidan kelgan matnli xabarlarni qayta ishlash
+    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    
+    print("JARVIS Bot muvaffaqiyatli ishga tushdi...")
+    application.run_polling()
 
 if __name__ == "__main__":
-    # Tokenni Render'dagi Environment Variables'dan avtomatik o'qiydi
-    BOT_TOKEN = os.getenv("BOT_TOKEN")
-    
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    print("--- Render JARVIS Online ---")
-    app.run_polling()
+    main()
