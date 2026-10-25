@@ -1,9 +1,9 @@
 import os
 import threading
+import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-from google import genai
 
 # ==========================================
 # 1. RENDER PORT TALABINI QONDIRUVCHI SERVER
@@ -23,12 +23,12 @@ def run_web_server():
 threading.Thread(target=run_web_server, daemon=True).start()
 
 # ==========================================
-# 2. TOKENLAR VA 10 TA API KALIT ROTATION
+# 2. BEARER TOKEN ROTATION TIZIMI
 # ==========================================
-# Telegram bot tokeningiz to'g'ridan-to'g'ri kiritildi
 BOT_TOKEN = "8878852882:AAHoEcCIG7LtqQvzRobwp8zhwtYu3nfpkLQ"
 
-API_KEYS = [
+# Siz bergan 10 ta standartsiz access tokenlar
+API_TOKENS = [
     "AQ.Ab8RN6IyY3m_t3xPVlIngvwms6CU-5qV6uOwD409R3nRqI4QTA",
     "AQ.Ab8RN6Iht85MbHgRRGJptRURcXp-V1t1xsDVOaOw-ZtKMCBPWA",
     "AQ.Ab8RN6IuwuzQATJUu0Rwy8dIXOwT8E4jGj2FchEmGgBgWFwcDQ",
@@ -41,42 +41,56 @@ API_KEYS = [
     "AQ.Ab8RN6LFwGjQ9yHh1lgSW_oK-ZdDP9WNJlw1Qur1ohqwQ0X7Xw"
 ]
 
-current_key_index = 0
+current_token_index = 0
 
-def get_next_client():
-    global current_key_index
-    key = API_KEYS[current_key_index]
-    current_key_index = (current_key_index + 1) % len(API_KEYS)
-    return genai.Client(api_key=key)
+def get_next_token():
+    global current_token_index
+    token = API_TOKENS[current_token_index]
+    current_token_index = (current_token_index + 1) % len(API_TOKENS)
+    return token
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
     
-    attempts = len(API_KEYS)
+    attempts = len(API_TOKENS)
     for _ in range(attempts):
-        client = get_next_client()
+        token = get_next_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "contents": [{
+                "parts": [{"text": user_message}]
+            }]
+        }
+        
         try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=user_message,
-            )
-            await update.message.reply_text(response.text)
-            return
-        except Exception as e:
-            error_str = str(e)
-            if "429" in error_str or "ResourceExhausted" in error_str or "quota" in error_str.lower():
-                continue
-            else:
-                await update.message.reply_text(f"Xatolik yuz berdi: {e}")
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "Javob topilmadi.")
+                await update.message.reply_text(text)
                 return
+            else:
+                # Agar token yaroqsiz (401) yoki limit tugagan bo'lsa (429/403), keyingi tokenga o'tamiz
+                if response.status_code in [401, 429, 403]:
+                    continue
+                else:
+                    # Boshqa turdagi xatolik chiqsa
+                    continue
+        except Exception:
+            continue
 
-    await update.message.reply_text("Barcha API kalitlarning limiti vaqtincha tugadi. Iltimos, biroz kuting.")
+    await update.message.reply_text("Barcha tokenlarning limiti tugagan yoki yaroqsiz.")
 
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
-    print("JARVIS Bot to'liq tayyor va ishga tushdi...")
+    print("JARVIS Bot (Bearer Token Rotation) bilan ishga tushdi...")
     application.run_polling()
 
 if __name__ == "__main__":
