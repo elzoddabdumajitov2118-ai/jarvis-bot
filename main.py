@@ -23,11 +23,11 @@ def run_web_server():
 threading.Thread(target=run_web_server, daemon=True).start()
 
 # ==========================================
-# 2. 10 TA GEMINI API KALIT VA ROTATION TIZIMI
+# 2. TOKENLAR VA 10 TA API KALIT ROTATION
 # ==========================================
-BOT_TOKEN = os.environ.get("8878852882:AAHoEcCIG7LtqQvzRobwp8zhwtYu3nfpkLQ")
+# Telegram bot tokeningiz to'g'ridan-to'g'ri kiritildi
+BOT_TOKEN = "8878852882:AAHoEcCIG7LtqQvzRobwp8zhwtYu3nfpkLQ"
 
-# Siz bergan 10 ta kalit to'g'ridan-to'g'ri ro'yxatga kiritildi
 API_KEYS = [
     "AQ.Ab8RN6IyY3m_t3xPVlIngvwms6CU-5qV6uOwD409R3nRqI4QTA",
     "AQ.Ab8RN6Iht85MbHgRRGJptRURcXp-V1t1xsDVOaOw-ZtKMCBPWA",
@@ -40,9 +40,6 @@ API_KEYS = [
     "AQ.Ab8RN6JhPlh2rkt8_42qwjJu7469Vd-Zn1wxyiaekIuNyY5-eg",
     "AQ.Ab8RN6LFwGjQ9yHh1lgSW_oK-ZdDP9WNJlw1Qur1ohqwQ0X7Xw"
 ]
-
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN topilmadi! Render'da Environment Variables ga BOT_TOKEN qo'shing.")
 
 current_key_index = 0
 
@@ -79,7 +76,7 @@ def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
-    print("JARVIS Bot (10 ta API Key Rotation) bilan ishga tushdi...")
+    print("JARVIS Bot to'liq tayyor va ishga tushdi...")
     application.run_polling()
 
 if __name__ == "__main__":
